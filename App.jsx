@@ -59,7 +59,7 @@ export default function RebaApp() {
       // const response = await fetch('https://zillow-com1.p.rapidapi.com/property', {
       //   method: 'GET',
       //   headers: {
-      //     'X-RapidAPI-Key': '72734be25fmsh1eb2f8fdb3d3111p1f99aajsn1cb830344296',
+      //     'X-RapidAPI-Key': 'YOUR_API_KEY_HERE',
       //     'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
       //   }
       // });
