@@ -8,8 +8,8 @@ export default function RebaApp() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [transcript, setTranscript] = useState('');
+  const [usingDemoData, setUsingDemoData] = useState(false);
 
-  // Initialize Speech Recognition
   useEffect(() => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       setError('Voice recognition not supported in this browser. Please use Chrome or Edge.');
@@ -50,77 +50,170 @@ export default function RebaApp() {
     recognition.start();
   };
 
+  const getDemoData = (query) => {
+    return {
+      address: query || '123 Main Street, Beverly Hills, CA 90210',
+      price: '$2,850,000',
+      bedrooms: 4,
+      bathrooms: 3.5,
+      sqft: '3,250',
+      yearBuilt: 2015,
+      propertyType: 'Single Family Home',
+      lotSize: '8,500 sq ft',
+      neighborhood: 'Beverly Hills',
+      zipCode: '90210',
+      salesHistory: [
+        { date: '2023-06-15', price: '$2,850,000', event: 'Sold' },
+        { date: '2020-03-20', price: '$2,450,000', event: 'Sold' },
+        { date: '2015-08-10', price: '$2,100,000', event: 'Sold (New Construction)' }
+      ],
+      taxInfo: {
+        annualTax: '$28,500',
+        taxYear: 2024,
+        assessedValue: '$2,650,000'
+      },
+      neighborhoodInfo: {
+        medianPrice: '$2,950,000',
+        schools: 'Highly Rated',
+        walkScore: '78/100',
+        crimeRate: 'Low',
+        appreciation: '+8.5% (YoY)'
+      },
+      features: [
+        'Swimming Pool',
+        'Gourmet Kitchen',
+        'Smart Home System',
+        'Hardwood Floors',
+        'Mountain Views',
+        'Two-Car Garage'
+      ]
+    };
+  };
+
   const handleSearch = async (query) => {
     setLoading(true);
     setError('');
+    setUsingDemoData(false);
     
     try {
-      // Demo data - In production, replace with actual Zillow API call
-      // const response = await fetch('https://zillow-com1.p.rapidapi.com/property', {
-      //   method: 'GET',
-      //   headers: {
-      //     'X-RapidAPI-Key': 'YOUR_API_KEY_HERE',
-      //     'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com'
-      //   }
-      // });
+      const apiKey = import.meta.env.VITE_RAPIDAPI_KEY;
       
-      // Simulating API response with demo data
-      setTimeout(() => {
-        const demoProperty = {
-          address: query || '123 Main Street, Beverly Hills, CA 90210',
-          price: '$2,850,000',
-          bedrooms: 4,
-          bathrooms: 3.5,
-          sqft: '3,250',
-          yearBuilt: 2015,
-          propertyType: 'Single Family Home',
-          lotSize: '8,500 sq ft',
-          neighborhood: 'Beverly Hills',
-          zipCode: '90210',
-          salesHistory: [
-            { date: '2023-06-15', price: '$2,850,000', event: 'Sold' },
-            { date: '2020-03-20', price: '$2,450,000', event: 'Sold' },
-            { date: '2015-08-10', price: '$2,100,000', event: 'Sold (New Construction)' }
-          ],
-          taxInfo: {
-            annualTax: '$28,500',
-            taxYear: 2024,
-            assessedValue: '$2,650,000'
-          },
-          neighborhoodInfo: {
-            medianPrice: '$2,950,000',
-            schools: 'Highly Rated',
-            walkScore: 78,
-            crimeRate: 'Low',
-            appreciation: '+8.5% (YoY)'
-          },
-          features: [
-            'Swimming Pool',
-            'Gourmet Kitchen',
-            'Smart Home System',
-            'Hardwood Floors',
-            'Mountain Views',
-            'Two-Car Garage'
-          ]
-        };
-        
-        setPropertyData(demoProperty);
+      if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
+        console.log('No API key found, using demo data');
+        setUsingDemoData(true);
+        setPropertyData(getDemoData(query));
         setLoading(false);
-      }, 1500);
+        return;
+      }
+
+      const url = `https://zillow-com1.p.rapidapi.com/propertyExtendedSearch?location=${encodeURIComponent(query)}`;
+      const searchResponse = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-RapidAPI-Key': apiKey,
+          'X-RapidAPI-Host': 'zillow-com1.p.rapidapi.com,',
+          'Accept': 'application/json'
+        }
+      });
+
+      console.log('API Response Status:', searchResponse.status);
+
+      if (!searchResponse.ok) {
+        throw new Error(`API Error: ${searchResponse.status}`);
+      }
+
+      const searchData = await searchResponse.json();
+      console.log('API Response Data:', searchData);
+      console.log('Full API structure:', JSON.stringify(searchData, null, 2));
+if (properties && properties.length > 0) {
+  console.log('First property fields:', Object.keys(properties[0]));
+}
       
+      // FIX: The API returns data directly as an array OR as {props: [...]}
+      // Check both formats
+      let properties = null;
+      
+      if (Array.isArray(searchData)) {
+        // Data is directly an array
+        properties = searchData;
+      } else if (searchData.props && Array.isArray(searchData.props)) {
+        // Data is in props property
+        properties = searchData.props;
+      } else if (searchData.results && Array.isArray(searchData.results)) {
+        // Some APIs use 'results'
+        properties = searchData.results;
+      }
+      
+      if (!properties || properties.length === 0) {
+        console.log('No properties in API response, using demo data');
+        setUsingDemoData(true);
+        setPropertyData(getDemoData(query));
+        setLoading(false);
+        return;
+      }
+
+      const property = properties[0];
+
+      // Format the property data
+      const formattedProperty = {
+        address: property.address || query,
+        price: property.price ? `$${property.price.toLocaleString()}` : 
+               property.listPrice ? `$${property.listPrice.toLocaleString()}` : 
+               'Price not available',
+        bedrooms: property.bedrooms || property.beds || 'N/A',
+        bathrooms: property.bathrooms || property.baths || 'N/A',
+        sqft: property.livingArea ? property.livingArea.toLocaleString() : 
+              property.livingAreaSqFt ? property.livingAreaSqFt.toLocaleString() : 
+              property.sqft ? property.sqft.toLocaleString() : 'N/A',
+        yearBuilt: property.yearBuilt || property.year_built || 'N/A',
+        propertyType: property.propertyType || property.homeType || 'Single Family Home',
+        lotSize: property.lotSize ? `${property.lotSize.toLocaleString()} sq ft` : 
+                 property.lotAreaSqFt ? `${property.lotAreaSqFt.toLocaleString()} sq ft` : 'N/A',
+        neighborhood: property.city || property.address?.split(',')[1]?.trim() || 'N/A',
+        zipCode: property.zipcode || property.zip || property.postalCode || 'N/A',
+        
+        salesHistory: property.priceHistory?.map(sale => ({
+          date: sale.date || 'Unknown',
+          price: sale.price ? `$${sale.price.toLocaleString()}` : 'N/A',
+          event: sale.event || 'Sale'
+        })) || [{ date: 'History not available', price: 'N/A', event: 'N/A' }],
+        
+        taxInfo: {
+          annualTax: property.taxAssessment ? `$${property.taxAssessment.toLocaleString()}` : 
+                     property.taxAnnualAmount ? `$${property.taxAnnualAmount.toLocaleString()}` : 'N/A',
+          taxYear: new Date().getFullYear(),
+          assessedValue: property.price ? `$${property.price.toLocaleString()}` : 'N/A'
+        },
+        
+        neighborhoodInfo: {
+          medianPrice: property.medianHomePrice ? `$${property.medianHomePrice.toLocaleString()}` : 'Data not available',
+          schools: property.schools ? 'Available' : 'N/A',
+          walkScore: property.walkScore || 'N/A',
+          crimeRate: 'N/A',
+          appreciation: 'N/A'
+        },
+        
+        features: property.description?.split(',').slice(0, 6).map(f => f.trim()) || 
+                  property.features || [
+          'Property features available upon request'
+        ]
+      };
+
+      console.log('Formatted Property:', formattedProperty);
+      setPropertyData(formattedProperty);
+      setLoading(false);
+
     } catch (err) {
-      setError('Failed to fetch property data. Please check your API key and try again.');
+      console.error('API Error:', err);
+      console.log('API failed, falling back to demo data');
+      setUsingDemoData(true);
+      setPropertyData(getDemoData(query));
       setLoading(false);
     }
   };
 
-  const formatCurrency = (value) => {
-    return value;
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
@@ -139,16 +232,13 @@ export default function RebaApp() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Search Section */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
           <div className="text-center mb-6">
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Search Properties by Voice</h2>
             <p className="text-gray-600">Tap the microphone and say an address</p>
           </div>
 
-          {/* Voice Button */}
           <div className="flex justify-center mb-6">
             <button
               onClick={startVoiceRecognition}
@@ -159,19 +249,12 @@ export default function RebaApp() {
                   : 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600'
               } text-white shadow-2xl`}
             >
-              {isListening ? (
-                <MicOff className="w-16 h-16" />
-              ) : (
-                <Mic className="w-16 h-16" />
-              )}
+              {isListening ? <MicOff className="w-16 h-16" /> : <Mic className="w-16 h-16" />}
             </button>
           </div>
 
-          {transcript && (
-            <p className="text-center text-gray-600 mb-4 italic">{transcript}</p>
-          )}
+          {transcript && <p className="text-center text-gray-600 mb-4 italic">{transcript}</p>}
 
-          {/* Manual Search */}
           <div className="flex gap-2 max-w-2xl mx-auto">
             <input
               type="text"
@@ -195,9 +278,14 @@ export default function RebaApp() {
               {error}
             </div>
           )}
+
+          {usingDemoData && (
+            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-center">
+              ℹ️ Using demo data. Add your RapidAPI key to environment variables for real property data.
+            </div>
+          )}
         </div>
 
-        {/* Loading State */}
         {loading && (
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
@@ -205,10 +293,8 @@ export default function RebaApp() {
           </div>
         )}
 
-        {/* Property Results */}
         {propertyData && !loading && (
           <div className="space-y-6">
-            {/* Main Property Info */}
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
                 <h3 className="text-2xl font-bold mb-2">{propertyData.address}</h3>
@@ -257,7 +343,6 @@ export default function RebaApp() {
               </div>
             </div>
 
-            {/* Sales History */}
             <div className="bg-white rounded-2xl shadow-xl p-6">
               <div className="flex items-center gap-2 mb-4">
                 <TrendingUp className="w-6 h-6 text-blue-600" />
@@ -279,7 +364,6 @@ export default function RebaApp() {
               </div>
             </div>
 
-            {/* Tax Information */}
             <div className="bg-white rounded-2xl shadow-xl p-6">
               <div className="flex items-center gap-2 mb-4">
                 <DollarSign className="w-6 h-6 text-blue-600" />
@@ -301,7 +385,6 @@ export default function RebaApp() {
               </div>
             </div>
 
-            {/* Neighborhood Information */}
             <div className="bg-white rounded-2xl shadow-xl p-6">
               <div className="flex items-center gap-2 mb-4">
                 <MapPin className="w-6 h-6 text-blue-600" />
@@ -318,7 +401,7 @@ export default function RebaApp() {
                 </div>
                 <div className="p-4 bg-purple-50 rounded-lg">
                   <p className="text-sm text-gray-600 mb-1">Walk Score</p>
-                  <p className="text-xl font-bold text-gray-800">{propertyData.neighborhoodInfo.walkScore}/100</p>
+                  <p className="text-xl font-bold text-gray-800">{propertyData.neighborhoodInfo.walkScore}</p>
                 </div>
                 <div className="p-4 bg-purple-50 rounded-lg">
                   <p className="text-sm text-gray-600 mb-1">Crime Rate</p>
@@ -332,39 +415,8 @@ export default function RebaApp() {
             </div>
           </div>
         )}
-
-        {/* Setup Instructions */}
-        {!propertyData && !loading && (
-          <div className="bg-white rounded-2xl shadow-xl p-8 mt-8">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Setup Instructions</h3>
-            <div className="space-y-3 text-gray-600">
-              <p className="flex items-start gap-2">
-                <span className="font-bold text-blue-600">1.</span>
-                Sign up for RapidAPI and subscribe to the Zillow API
-              </p>
-              <p className="flex items-start gap-2">
-                <span className="font-bold text-blue-600">2.</span>
-                Get your API key from the RapidAPI dashboard
-              </p>
-              <p className="flex items-start gap-2">
-                <span className="font-bold text-blue-600">3.</span>
-                Replace the demo data in the code with actual API calls
-              </p>
-              <p className="flex items-start gap-2">
-                <span className="font-bold text-blue-600">4.</span>
-                Use Chrome or Edge browser for best voice recognition support
-              </p>
-            </div>
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-              <p className="text-sm text-gray-700">
-                <strong>Note:</strong> This demo uses sample data. Integrate your RapidAPI Zillow key to access live MLS data.
-              </p>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Footer */}
       <div className="bg-gray-800 text-white py-6 mt-12">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <p className="text-sm">REBA - Real Estate Business Assistant</p>
